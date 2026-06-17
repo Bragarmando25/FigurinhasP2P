@@ -1,0 +1,26 @@
+{
+  "name": "figurinhasp2p",
+  "version": "1.0.0",
+  "description": "",
+  "main": "peer.js",
+  "scripts": {
+    "start": "node peer.js",
+    "test": "node --test"
+  },
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/Bragarmando25/FigurinhasP2P.git"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "type": "commonjs",
+  "bugs": {
+    "url": "https://github.com/Bragarmando25/FigurinhasP2P/issues"
+  },
+  "homepage": "https://github.com/Bragarmando25/FigurinhasP2P#readme",
+  "dependencies": {
+    "express": "^5.2.1",
+    "ws": "^8.21.0"
+  }
+}
