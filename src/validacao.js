@@ -6,17 +6,6 @@ function figurinhaValida(valor) {
   return /^FIG-\d{2}$/.test(valor || "");
 }
 
-function inventarioValido(valor) {
-  return (
-    valor &&
-    !Array.isArray(valor) &&
-    Object.entries(valor).every(
-      ([stickerId, quantidade]) =>
-        figurinhaValida(stickerId) && Number.isInteger(quantidade) && quantidade >= 0,
-    )
-  );
-}
-
 function trocaValida(mensagem) {
   return (
     typeof mensagem.trade_id === "string" &&
@@ -51,7 +40,6 @@ function campoCompativel(recebido, esperado) {
 module.exports = {
   peerIdValido,
   figurinhaValida,
-  inventarioValido,
   trocaValida,
   mesmaTroca,
 };

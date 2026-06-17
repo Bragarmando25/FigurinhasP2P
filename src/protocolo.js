@@ -2,15 +2,12 @@
 const { randomUUID } = require("crypto");
 const {
   figurinhaValida,
-  inventarioValido,
   mesmaTroca,
   peerIdValido,
   trocaValida,
 } = require("./validacao");
 
 const TIPOS_DIRECIONADOS = new Set([
-  "INVENTORY_REQUEST",
-  "INVENTORY_RESPONSE",
   "TRADE_OFFER",
   "TRADE_ACCEPT",
   "TRADE_REJECT",
@@ -36,8 +33,6 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
     SEARCH_MISS: tratarBuscaNaoEncontrada,
   };
   const tratadoresDirecionados = {
-    INVENTORY_REQUEST: responderInventario,
-    INVENTORY_RESPONSE: exibirInventario,
     TRADE_OFFER: receberOferta,
     TRADE_ACCEPT: receberAceite,
     TRADE_REJECT: receberRejeicao,
@@ -222,21 +217,6 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
     }
   }
 
-  function responderInventario(mensagem) {
-    enviarDirecionada("INVENTORY_RESPONSE", mensagem.sender_peer_id, {
-      inventory: { ...inventario },
-    });
-  }
-
-  function exibirInventario(mensagem) {
-    if (!inventarioValido(mensagem.inventory)) {
-      return;
-    }
-
-    console.log(`\nInventario de ${mensagem.sender_peer_id}:`);
-    console.log(mensagem.inventory);
-  }
-
   function buscarFigurinha(figurinhaId) {
     if (!figurinhaValida(figurinhaId)) {
       return { ok: false, mensagem: "sticker_id invalido." };
@@ -259,15 +239,6 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
       ttl: 7,
     });
     return { ok: true, mensagem: `Busca ${queryId} iniciada.` };
-  }
-
-  function consultarInventario(peerDestinoId) {
-    if (!peerIdValido(peerDestinoId) || peerDestinoId === peerId) {
-      return { ok: false, mensagem: "peer_id de destino invalido." };
-    }
-
-    enviarDirecionada("INVENTORY_REQUEST", peerDestinoId);
-    return { ok: true, mensagem: `Consulta enviada para ${peerDestinoId}.` };
   }
 
   function oferecerTroca(peerDestinoId, figurinhaOferecida, figurinhaDesejada) {
@@ -536,7 +507,6 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
       tratarOfertaRecebida = handler;
     },
     buscarFigurinha,
-    consultarInventario,
     oferecerTroca,
     aceitarTroca,
     rejeitarTroca,

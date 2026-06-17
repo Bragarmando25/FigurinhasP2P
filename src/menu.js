@@ -22,11 +22,8 @@ function iniciarCli({ peerId, inventario, rede, protocolo }) {
     2: async () => mostrarResultado(
       protocolo.buscarFigurinha(normalizar(await perguntar("Figurinha: "))),
     ),
-    3: async () => mostrarResultado(
-      protocolo.consultarInventario(normalizar(await perguntar("Peer: "))),
-    ),
-    4: proporTroca,
-    5: () => console.log(rede.listarPeers()),
+    3: proporTroca,
+    4: () => console.log(rede.listarPeers()),
   };
 
   async function menu() {
@@ -34,9 +31,8 @@ function iniciarCli({ peerId, inventario, rede, protocolo }) {
       console.log(`\n===== ${peerId} =====`);
       console.log("1 - Ver inventario");
       console.log("2 - Buscar figurinha na rede");
-      console.log("3 - Consultar inventario de um peer");
-      console.log("4 - Propor troca");
-      console.log("5 - Ver vizinhos conectados");
+      console.log("3 - Propor troca");
+      console.log("4 - Ver vizinhos conectados");
       console.log("0 - Sair");
 
       const opcao = (await perguntar("Escolha: ")).trim();
