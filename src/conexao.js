@@ -151,6 +151,7 @@ function criarRede({
     },
     registrarPeer,
     enviarParaPeer,
+    obterPeerDoSocket,
     listarPeers,
     enviarBuscaParaTodos,
     enviarParaTodos,

@@ -14,7 +14,13 @@ const TIPOS_DIRECIONADOS = new Set([
   "TRANSFER_CONFIRM",
 ]);
 
-function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento }) {
+function criarProtocolo({
+  peerId,
+  inventario,
+  urlImagens,
+  rede,
+  armazenamento,
+}) {
   const buscasProcessadas = new Set(
     armazenamento.historico
       .map((evento) => evento.query_id)
@@ -70,107 +76,149 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
     console.log(`HELLO recebido de ${mensagem.peer_id}`);
   }
 
+  function enviarNoSocket(socket, mensagem) {
+  if (socket && socket.readyState === 1) {
+    socket.send(JSON.stringify(mensagem));
+  }
+}
+
   function tratarBusca(mensagem, socket) {
-    if (
-      !mensagem.query_id ||
-      !figurinhaValida(mensagem.sticker_id) ||
-      !peerIdValido(mensagem.origin_peer_id) ||
-      !peerIdValido(mensagem.sender_peer_id) ||
-      !Number.isInteger(mensagem.ttl) ||
-      mensagem.ttl < 0
-    ) {
-      console.log("SEARCH ignorado: campos invalidos.");
-      return;
-    }
+  if (
+    !mensagem.query_id ||
+    !figurinhaValida(mensagem.sticker_id) ||
+    !peerIdValido(mensagem.origin_peer_id) ||
+    !peerIdValido(mensagem.sender_peer_id) ||
+    !Number.isInteger(mensagem.ttl) ||
+    mensagem.ttl < 0
+  ) {
+    console.log("SEARCH ignorado: campos invalidos.");
+    return;
+  }
 
-    if (buscasProcessadas.has(mensagem.query_id)) {
-      console.log("Busca duplicada ignorada.");
-      return;
-    }
+  console.log(
+    `SEARCH recebido de ${mensagem.sender_peer_id} procurando ${mensagem.sticker_id} | ttl=${mensagem.ttl} | query_id=${mensagem.query_id}`
+  );
 
-    buscasProcessadas.add(mensagem.query_id);
-    rotasDeRetorno.set(mensagem.query_id, socket);
-    armazenamento.registrarEvento({
-      type: "SEARCH_RECEIVED",
-      query_id: mensagem.query_id,
-      sticker_id: mensagem.sticker_id,
-      origin_peer_id: mensagem.origin_peer_id || mensagem.origin_peer,
-    });
+  if (buscasProcessadas.has(mensagem.query_id)) {
+    console.log("Busca duplicada ignorada.");
+    return;
+  }
 
-    const figurinhaId = mensagem.sticker_id;
+  buscasProcessadas.add(mensagem.query_id);
 
-    if (quantidadeDisponivel(figurinhaId, 1)) {
-      enviarNoSocket(socket, {
-        type: "SEARCH_HIT",
-        message_id: randomUUID(),
-        query_id: mensagem.query_id,
-        origin_peer_id: mensagem.origin_peer_id || mensagem.origin_peer,
-        sender_peer_id: peerId,
-        receiver_peer_id: mensagem.sender_peer_id,
-        from_peer: peerId,
-        from_peer_id: peerId,
-        sticker_id: figurinhaId,
-        quantity: obterQuantidadeDisponivel(figurinhaId),
-        image_url: `${urlImagens.replace(/\/$/, "")}/figurinhas/${figurinhaId}.png`,
-      });
-      return;
-    }
+  // Guarda o socket por onde a busca chegou.
+  // Isso permite devolver o SEARCH_HIT pelo mesmo caminho.
+  rotasDeRetorno.set(mensagem.query_id, socket);
 
-    if (mensagem.ttl > 0) {
-      rede.enviarBuscaParaTodos(
-        {
-          ...mensagem,
-          sender_peer_id: peerId,
-          ttl: mensagem.ttl - 1,
-        },
-        socket,
-      );
-      return;
-    }
+  armazenamento.registrarEvento({
+    type: "SEARCH_RECEIVED",
+    query_id: mensagem.query_id,
+    sticker_id: mensagem.sticker_id,
+    origin_peer_id: mensagem.origin_peer_id,
+  });
+
+  const figurinhaId = mensagem.sticker_id;
+
+  console.log(`Verificando inventario local para ${figurinhaId}...`);
+
+  if (quantidadeDisponivel(figurinhaId, 1)) {
+    console.log(
+      `Tenho ${figurinhaId}. Enviando SEARCH_HIT para ${mensagem.sender_peer_id}.`
+    );
 
     enviarNoSocket(socket, {
-      type: "SEARCH_MISS",
+      type: "SEARCH_HIT",
       message_id: randomUUID(),
       query_id: mensagem.query_id,
       origin_peer_id: mensagem.origin_peer_id,
       sender_peer_id: peerId,
       receiver_peer_id: mensagem.sender_peer_id,
+      from_peer: peerId,
+      from_peer_id: peerId,
       sticker_id: figurinhaId,
+      quantity: obterQuantidadeDisponivel(figurinhaId),
+      image_url: `${urlImagens.replace(/\/$/, "")}/figurinhas/${figurinhaId}.png`,
     });
+
+    return;
   }
+
+  if (mensagem.ttl > 0) {
+    console.log(
+      `Nao tenho ${figurinhaId}. Repassando busca com ttl=${mensagem.ttl - 1}.`
+    );
+
+    rede.enviarBuscaParaTodos(
+      {
+        ...mensagem,
+        sender_peer_id: peerId,
+        ttl: mensagem.ttl - 1,
+      },
+      socket
+    );
+
+    return;
+  }
+
+  console.log(`Nao tenho ${figurinhaId} e o TTL acabou. Enviando SEARCH_MISS.`);
+
+  enviarNoSocket(socket, {
+    type: "SEARCH_MISS",
+    message_id: randomUUID(),
+    query_id: mensagem.query_id,
+    origin_peer_id: mensagem.origin_peer_id,
+    sender_peer_id: peerId,
+    receiver_peer_id: mensagem.sender_peer_id,
+    sticker_id: figurinhaId,
+  });
+}
 
   function tratarBuscaEncontrada(mensagem, socket) {
-    const peerEncontrado =
-      mensagem.from_peer_id || mensagem.from_peer || mensagem.sender_peer_id;
-    if (
-      !mensagem.query_id ||
-      !figurinhaValida(mensagem.sticker_id) ||
-      !peerIdValido(peerEncontrado)
-    ) {
-      return;
-    }
+  const peerEncontrado =
+    mensagem.from_peer_id || mensagem.from_peer || mensagem.sender_peer_id;
 
-    if (buscasOriginadas.has(mensagem.query_id)) {
-      armazenamento.registrarEvento({
-        type: "SEARCH_HIT",
-        query_id: mensagem.query_id,
-        sticker_id: mensagem.sticker_id,
-        from_peer_id: peerEncontrado,
-      });
-      console.log("\nFIGURINHA ENCONTRADA!");
-      console.log(`Peer: ${peerEncontrado}`);
-      console.log(`Figurinha: ${mensagem.sticker_id}`);
-      console.log(`Quantidade: ${mensagem.quantity}`);
-      console.log(`Imagem: ${mensagem.image_url}`);
-      return;
-    }
-
-    const socketDeRetorno = rotasDeRetorno.get(mensagem.query_id);
-
-    if (socketDeRetorno && socketDeRetorno !== socket) {
-      rede.enviarMensagem(socketDeRetorno, mensagem);
-    }
+  if (
+    !mensagem.query_id ||
+    !figurinhaValida(mensagem.sticker_id) ||
+    !peerIdValido(peerEncontrado)
+  ) {
+    console.log("SEARCH_HIT ignorado: campos invalidos.");
+    return;
   }
+
+  console.log(
+    `SEARCH_HIT recebido de ${peerEncontrado} para ${mensagem.sticker_id} | query_id=${mensagem.query_id}`
+  );
+
+  if (buscasOriginadas.has(mensagem.query_id)) {
+    armazenamento.registrarEvento({
+      type: "SEARCH_HIT",
+      query_id: mensagem.query_id,
+      sticker_id: mensagem.sticker_id,
+      from_peer_id: peerEncontrado,
+    });
+
+    console.log("\nFIGURINHA ENCONTRADA!");
+    console.log(`Peer: ${peerEncontrado}`);
+    console.log(`Figurinha: ${mensagem.sticker_id}`);
+    console.log(`Quantidade: ${mensagem.quantity}`);
+    console.log(`Imagem: ${mensagem.image_url}`);
+    return;
+  }
+
+  const socketDeRetorno = rotasDeRetorno.get(mensagem.query_id);
+
+  if (socketDeRetorno && socketDeRetorno !== socket) {
+    console.log(
+      `Repassando SEARCH_HIT de ${peerEncontrado} para o caminho de retorno.`
+    );
+
+    rede.enviarMensagem(socketDeRetorno, mensagem);
+    return;
+  }
+
+  console.log("Nao foi encontrada rota de retorno para o SEARCH_HIT.");
+}
 
   function tratarBuscaNaoEncontrada(mensagem, socket) {
     if (!mensagem.query_id || !figurinhaValida(mensagem.sticker_id)) {
@@ -245,7 +293,10 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
     if (!peerIdValido(peerDestinoId) || peerDestinoId === peerId) {
       return { ok: false, mensagem: "peer_id de destino invalido." };
     }
-    if (!figurinhaValida(figurinhaOferecida) || !figurinhaValida(figurinhaDesejada)) {
+    if (
+      !figurinhaValida(figurinhaOferecida) ||
+      !figurinhaValida(figurinhaDesejada)
+    ) {
       return { ok: false, mensagem: "Identificador de figurinha invalido." };
     }
     if (!quantidadeDisponivel(figurinhaOferecida, 1)) {
@@ -275,7 +326,8 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
     const mensagemNormalizada = normalizarQuantidadesDaTroca(mensagem);
     if (
       !trocaValida(mensagemNormalizada) ||
-      mensagemNormalizada.proposer_peer_id !== mensagemNormalizada.sender_peer_id ||
+      mensagemNormalizada.proposer_peer_id !==
+        mensagemNormalizada.sender_peer_id ||
       trocas.has(mensagemNormalizada.trade_id)
     ) {
       console.log("TRADE_OFFER ignorada: campos invalidos.");
@@ -299,9 +351,17 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
     if (!troca || troca.status !== "PENDING") {
       return { ok: false, mensagem: "Proposta pendente nao encontrada." };
     }
-    if (!quantidadeDisponivel(troca.requested_sticker_id, troca.requested_quantity)) {
+    if (
+      !quantidadeDisponivel(
+        troca.requested_sticker_id,
+        troca.requested_quantity,
+      )
+    ) {
       rejeitarTroca(tradeId, "Figurinha desejada indisponivel.");
-      return { ok: false, mensagem: "Troca rejeitada: figurinha indisponivel." };
+      return {
+        ok: false,
+        mensagem: "Troca rejeitada: figurinha indisponivel.",
+      };
     }
 
     troca.status = "ACCEPTED";
@@ -337,7 +397,9 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
     ) {
       return;
     }
-    if (!quantidadeNoInventario(troca.offered_sticker_id, troca.offered_quantity)) {
+    if (
+      !quantidadeNoInventario(troca.offered_sticker_id, troca.offered_quantity)
+    ) {
       troca.status = "REJECTED";
       liberarFigurinha(troca.offered_sticker_id, troca.offered_quantity);
       enviarDirecionada("TRADE_REJECT", troca.receiver_peer_id, {
@@ -385,7 +447,9 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
       liberarFigurinha(troca.requested_sticker_id, troca.requested_quantity);
     }
     armazenamento.registrarEvento({ type: "TRADE_REJECT_RECEIVED", ...troca });
-    console.log(`\nTroca ${troca.trade_id} rejeitada: ${troca.reason || "sem motivo"}`);
+    console.log(
+      `\nTroca ${troca.trade_id} rejeitada: ${troca.reason || "sem motivo"}`,
+    );
   }
 
   function receberConfirmacao(mensagem) {
@@ -403,8 +467,16 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
       return;
     }
 
-    if (mensagem.phase === "PROPOSER_CONFIRMED" && troca.status === "ACCEPTED") {
-      if (!quantidadeNoInventario(troca.requested_sticker_id, troca.requested_quantity)) {
+    if (
+      mensagem.phase === "PROPOSER_CONFIRMED" &&
+      troca.status === "ACCEPTED"
+    ) {
+      if (
+        !quantidadeNoInventario(
+          troca.requested_sticker_id,
+          troca.requested_quantity,
+        )
+      ) {
         console.log(`Nao foi possivel concluir a troca ${troca.trade_id}.`);
         return;
       }
@@ -426,16 +498,25 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
       return;
     }
 
-    if (mensagem.phase === "COMPLETED" && troca.status === "PROPOSER_CONFIRMED") {
+    if (
+      mensagem.phase === "COMPLETED" &&
+      troca.status === "PROPOSER_CONFIRMED"
+    ) {
       troca.status = "COMPLETED";
       armazenamento.registrarEvento({ type: "TRANSFER_CONFIRM", ...troca });
       console.log(`\nTroca ${troca.trade_id} concluida.`);
     }
   }
 
-  function atualizarInventario(removerId, removerQuantidade, adicionarId, adicionarQuantidade) {
+  function atualizarInventario(
+    removerId,
+    removerQuantidade,
+    adicionarId,
+    adicionarQuantidade,
+  ) {
     inventario[removerId] = (inventario[removerId] || 0) + removerQuantidade;
-    inventario[adicionarId] = (inventario[adicionarId] || 0) + adicionarQuantidade;
+    inventario[adicionarId] =
+      (inventario[adicionarId] || 0) + adicionarQuantidade;
     armazenamento.salvarInventario();
   }
 
@@ -467,7 +548,10 @@ function criarProtocolo({ peerId, inventario, urlImagens, rede, armazenamento })
   }
 
   function quantidadeNoInventario(figurinhaId, quantidade) {
-    return Number.isInteger(inventario[figurinhaId]) && inventario[figurinhaId] >= quantidade;
+    return (
+      Number.isInteger(inventario[figurinhaId]) &&
+      inventario[figurinhaId] >= quantidade
+    );
   }
 
   function reservarFigurinha(figurinhaId, quantidade) {
