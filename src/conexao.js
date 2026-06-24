@@ -1,22 +1,22 @@
-//Servidores, sockets e envio de mensagens
+// Servidores, sockets e envio de mensagens
 const { randomUUID } = require("crypto");
 const path = require("path");
 const express = require("express");
 const WebSocket = require("ws");
 
-function criarRede({
-  peerId,
-  vizinhos,
-  portaWebsocket,
-  portaImagens,
-}) {
+function criarRede({ peerId, vizinhos, portaWebsocket, portaImagens }) {
   const conexoes = new Set();
   const peersConectados = new Map();
+
   let tratarMensagem = () => {
     throw new Error("Tratador de mensagens nao configurado.");
   };
 
   function configurarSocket(socket) {
+    if (conexoes.has(socket)) {
+      return;
+    }
+
     conexoes.add(socket);
 
     socket.on("message", (data) => {
@@ -39,6 +39,15 @@ function criarRede({
     });
   }
 
+  function criarHello() {
+    return {
+      type: "HELLO",
+      message_id: randomUUID(),
+      sender_peer_id: peerId,
+      peers: vizinhos,
+    };
+  }
+
   function iniciarServidorImagens() {
     const app = express();
     const diretorioFigurinhas = path.join(__dirname, "..", "figurinhas");
@@ -59,7 +68,7 @@ function criarRede({
     servidor.on("connection", (socket) => {
       console.log("Novo vizinho conectado.");
       configurarSocket(socket);
-      enviarMensagem(socket, { type: "HELLO", peer_id: peerId });
+      enviarMensagem(socket, criarHello());
     });
   }
 
@@ -73,7 +82,7 @@ function criarRede({
     socket.on("open", () => {
       console.log(`Conectado ao vizinho ${url}`);
       configurarSocket(socket);
-      enviarMensagem(socket, { type: "HELLO", peer_id: peerId });
+      enviarMensagem(socket, criarHello());
     });
 
     socket.on("error", () => {
@@ -92,7 +101,7 @@ function criarRede({
   function enviarParaPeer(peerDestinoId, mensagem) {
     const socket = peersConectados.get(peerDestinoId);
 
-    if (!socket) {
+    if (!socket || socket.readyState !== WebSocket.OPEN) {
       return false;
     }
 
@@ -108,6 +117,7 @@ function criarRede({
     conexoes.forEach((socket) => {
       if (socket !== socketIgnorado && socket.readyState === WebSocket.OPEN) {
         const peerDestinoId = obterPeerDoSocket(socket);
+
         enviarMensagem(socket, {
           ...mensagem,
           message_id: randomUUID(),
@@ -126,7 +136,7 @@ function criarRede({
   }
 
   function enviarMensagem(socket, mensagem) {
-    if (socket.readyState === WebSocket.OPEN) {
+    if (socket && socket.readyState === WebSocket.OPEN) {
       socket.send(JSON.stringify(mensagem));
     }
   }
@@ -137,6 +147,7 @@ function criarRede({
         return peerConectadoId;
       }
     }
+
     return null;
   }
 
@@ -144,11 +155,13 @@ function criarRede({
     definirTratadorMensagem(novoTratador) {
       tratarMensagem = novoTratador;
     },
+
     iniciar() {
       iniciarServidorImagens();
       iniciarServidorWebSocket();
       conectarAosVizinhos();
     },
+
     registrarPeer,
     enviarParaPeer,
     obterPeerDoSocket,

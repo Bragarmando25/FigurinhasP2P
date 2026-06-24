@@ -1,4 +1,4 @@
-//menu
+// Menu interativo do terminal
 const readline = require("readline");
 
 function iniciarCli({ peerId, inventario, rede, protocolo }) {
@@ -6,23 +6,30 @@ function iniciarCli({ peerId, inventario, rede, protocolo }) {
     input: process.stdin,
     output: process.stdout,
   });
+
   let filaPerguntas = Promise.resolve();
 
   function perguntar(texto) {
     const perguntaAtual = filaPerguntas.then(
       () => new Promise((resolve) => interfaceLeitura.question(texto, resolve)),
     );
+
     filaPerguntas = perguntaAtual.catch(() => {});
     return perguntaAtual;
   }
 
   protocolo.definirTratadorOferta(responderOferta);
+
   const acoesMenu = {
     1: () => console.log(inventario),
-    2: async () => mostrarResultado(
-      protocolo.buscarFigurinha(normalizar(await perguntar("Figurinha: "))),
-    ),
+
+    2: async () =>
+      mostrarResultado(
+        protocolo.buscarFigurinha(normalizar(await perguntar("Figurinha: "))),
+      ),
+
     3: proporTroca,
+
     4: () => console.log(rede.listarPeers()),
   };
 
@@ -59,10 +66,19 @@ function iniciarCli({ peerId, inventario, rede, protocolo }) {
 
   async function proporTroca() {
     const peerDestinoId = normalizar(await perguntar("Peer de destino: "));
-    const figurinhaOferecida = normalizar(await perguntar("Figurinha que voce oferece: "));
-    const figurinhaDesejada = normalizar(await perguntar("Figurinha que voce quer: "));
+    const figurinhaOferecida = normalizar(
+      await perguntar("Figurinha que voce oferece: "),
+    );
+    const figurinhaDesejada = normalizar(
+      await perguntar("Figurinha que voce quer: "),
+    );
+
     mostrarResultado(
-      protocolo.oferecerTroca(peerDestinoId, figurinhaOferecida, figurinhaDesejada),
+      protocolo.oferecerTroca(
+        peerDestinoId,
+        figurinhaOferecida,
+        figurinhaDesejada,
+      ),
     );
   }
 
@@ -85,7 +101,7 @@ function iniciarCli({ peerId, inventario, rede, protocolo }) {
         return;
       }
 
-      console.log("s ou n.");
+      console.log("Digite s ou n.");
     }
   }
 

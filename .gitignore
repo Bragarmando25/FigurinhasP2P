@@ -2,3 +2,4 @@ node_modules/
 historico.json
 localtest/
 *.tmp
+figurinhas/*.png

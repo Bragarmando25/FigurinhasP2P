@@ -1,9 +1,14 @@
-//Inventário
+// Inventario e historico local
 const fs = require("fs");
 const path = require("path");
 
-function criarArmazenamento({ caminhoInventario, dadosInventario, caminhoHistorico }) {
+function criarArmazenamento({
+  caminhoInventario,
+  dadosInventario,
+  caminhoHistorico,
+}) {
   const historico = carregarJson(caminhoHistorico, []);
+
   if (!Array.isArray(historico)) {
     throw new Error("historico.json deve conter uma lista JSON.");
   }
@@ -17,6 +22,7 @@ function criarArmazenamento({ caminhoInventario, dadosInventario, caminhoHistori
       timestamp: new Date().toISOString(),
       ...evento,
     });
+
     salvarJson(caminhoHistorico, historico);
   }
 
